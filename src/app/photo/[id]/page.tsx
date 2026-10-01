@@ -1,132 +1,294 @@
+'use client';
+
 import Image from 'next/image';
 import Link from 'next/link';
-import { mockPhotography } from '@/data/photography';
-import { notFound } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
+import { useState } from 'react';
+import PhotographyGrid from '@/components/photography/PhotographyGrid';
+import Avatar from '@/components/profile/Avatar';
+import Button, { buttonClasses } from '@/components/ui/Button';
+import Container from '@/components/ui/Container';
+import EmptyState from '@/components/ui/EmptyState';
+import Reveal from '@/components/ui/Reveal';
+import { useWallet } from '@/components/wallet/WalletProvider';
+import { serif } from '@/lib/fonts';
+import { cn, formatAddress, formatDate, formatEth, formatTokenId, sameAddress } from '@/lib/format';
+import { DEMO_WALLET } from '@/data/photography';
+import { canOptimize } from '@/components/photography/PhotographyCard';
+import {
+  IS_ONCHAIN,
+  buyArtwork,
+  isLocalArtwork,
+  listArtwork,
+  removeArtwork,
+  toFriendlyError,
+  unlistArtwork,
+  useIsClient,
+  useMarketData,
+} from '@/lib/market';
+import { CATEGORY_LABELS, LICENSE_LABELS } from '@/lib/labels';
+import { getDisplayName, getPhotoById, getSalesFor } from '@/lib/photography';
 
-export default async function PhotographyDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = await params;
-  const photo = mockPhotography.find((p) => p.id === resolvedParams.id);
-  
-  if (!photo) {
-    notFound();
+function Person({ label, address }: { label: string; address: string }) {
+  return (
+    <Link href={`/profile/${address}`} className="group flex items-center gap-3">
+      <Avatar address={address} name={getDisplayName(address)} className="h-10 w-10 text-sm" />
+      <div>
+        <p className="text-xs text-zinc-500">{label}</p>
+        <p className="text-sm text-white group-hover:underline">{getDisplayName(address)}</p>
+      </div>
+    </Link>
+  );
+}
+
+export default function PhotoDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const router = useRouter();
+  const { photos: all, sales: allSales, status: dataStatus } = useMarketData();
+  const isClient = useIsClient();
+  const photo = getPhotoById(id, all);
+  const { address, connect, status } = useWallet();
+  const [notice, setNotice] = useState<{ tone: 'ok' | 'error' | 'info'; text: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [listPrice, setListPrice] = useState('');
+
+  // Dữ liệu on-chain / tác phẩm demo chỉ có ở trình duyệt – đừng báo "không tìm thấy" khi đang tải.
+  if (!photo && (!isClient || dataStatus === 'loading')) {
+    return <Container className="py-24 text-zinc-500">Đang tải…</Container>;
   }
 
+  if (!photo) {
+    return (
+      <Container className="py-24">
+        <EmptyState
+          title="Không tìm thấy tác phẩm"
+          description="Tác phẩm có thể đã bị xóa hoặc đường dẫn không đúng."
+          action={<Link href="/marketplace" className={buttonClasses('primary')}>Quay lại chợ ảnh</Link>}
+        />
+      </Container>
+    );
+  }
+
+  const sales = getSalesFor(photo.id, allSales);
+  // Demo không có ví → dùng ví mẫu. On-chain bắt buộc phải có ví thật.
+  const me = address ?? (!IS_ONCHAIN && status === 'unavailable' ? DEMO_WALLET : null);
+  const isOwner = sameAddress(photo.ownerAddress, me);
+  const more = all.filter((p) => p.id !== photo.id && p.category === photo.category).slice(0, 4);
+
+  /** Chạy một giao dịch: hiện trạng thái chờ MetaMask, báo thành công / lỗi dễ hiểu. */
+  const run = async (action: () => Promise<{ txHash?: string }>, success: string) => {
+    setBusy(true);
+    setNotice({ tone: 'info', text: IS_ONCHAIN ? 'Hãy xác nhận giao dịch trong MetaMask…' : 'Đang xử lý…' });
+    try {
+      const { txHash } = await action();
+      setNotice({ tone: 'ok', text: txHash ? `${success} (tx ${txHash.slice(0, 10)}…)` : success });
+      return true;
+    } catch (err) {
+      setNotice({ tone: 'error', text: toFriendlyError(err) });
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onBuy = async () => {
+    if (!me) return connect();
+    if (!IS_ONCHAIN && !confirm(`Mua “${photo.title}” với giá ${formatEth(photo.price)}?\n\nChế độ demo: không có ETH thật nào được gửi đi.`)) return;
+    await run(() => buyArtwork(photo, me), 'Mua thành công! Tác phẩm đã nằm trong bộ sưu tập của bạn.');
+  };
+
+  const onList = async () => {
+    const value = listPrice || (photo.price > 0 ? String(photo.price) : '');
+    const price = Number(value);
+    if (!value || !Number.isFinite(price) || price < 0.001) {
+      return setNotice({ tone: 'error', text: 'Giá tối thiểu là 0.001 ETH.' });
+    }
+    const ok = await run(() => listArtwork(photo, value), `Đã rao bán với giá ${formatEth(price)}.`);
+    if (ok) setListPrice('');
+  };
+
+  const onUnlist = () => run(() => unlistArtwork(photo), 'Đã ngừng rao bán.');
+
   return (
-    <div className="min-h-screen bg-zinc-950 py-12">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="mb-6">
-          <Link href="/marketplace" className="inline-flex items-center text-sm font-medium text-zinc-400 hover:text-white transition-colors">
-            <svg className="mr-2" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
-            Back to Marketplace
-          </Link>
-        </div>
-        
-        <div className="flex flex-col lg:flex-row gap-8 lg:gap-12">
-          {/* Left Column: Image */}
-          <div className="w-full lg:w-1/2 lg:sticky lg:top-24 h-[50vh] min-h-[400px] lg:h-[70vh] self-start max-h-[800px]">
-            <div className="relative w-full h-full bg-zinc-900 rounded-2xl overflow-hidden border border-zinc-800 shadow-2xl shadow-purple-900/10">
-              <Image 
-                src={photo.image}
-                alt={photo.title}
-                fill
-                className="object-contain p-4"
-                sizes="(max-width: 1024px) 100vw, 50vw"
-                priority
-              />
+    <>
+      <Container className="py-10 lg:py-14">
+        <Link href="/marketplace" className="mb-8 inline-block text-sm text-zinc-500 hover:text-white">
+          ← Quay lại chợ ảnh
+        </Link>
+
+        <div className="grid gap-12 lg:grid-cols-[1.4fr_1fr]">
+          <Reveal variant="scale">
+            <div className="relative aspect-[4/5] overflow-hidden rounded-3xl bg-zinc-900 ring-1 ring-white/10 lg:aspect-auto lg:h-full lg:min-h-[640px]">
+              {photo.image && (
+                <Image src={photo.image} alt={photo.title} fill loading="eager" fetchPriority="high" unoptimized={!canOptimize(photo.image)} sizes="(min-width: 1024px) 60vw, 100vw" className="object-cover" />
+              )}
             </div>
-          </div>
-          
-          {/* Right Column: Details */}
-          <div className="w-full lg:w-1/2">
-            <div className="inline-block px-3 py-1 bg-zinc-900 border border-zinc-800 rounded-full text-xs font-semibold text-purple-400 mb-6">
-              {photo.category}
+          </Reveal>
+
+          <Reveal delay={150} className="flex flex-col">
+            <div className="flex items-center gap-3 text-sm text-zinc-500">
+              <span className="rounded-full border border-white/10 px-2.5 py-1 text-xs text-zinc-300">{CATEGORY_LABELS[photo.category]}</span>
+              <span className="font-mono">{formatTokenId(photo.tokenId)}</span>
             </div>
-            <h1 className="text-3xl md:text-5xl font-bold text-white mb-4 leading-tight">{photo.title}</h1>
-            <p className="text-xl text-zinc-400 mb-8">by <span className="text-white hover:text-purple-400 hover:underline cursor-pointer transition-colors">{photo.creator}</span></p>
-            
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 mb-8">
-              <h2 className="text-sm font-medium text-zinc-500 mb-2">Description</h2>
-              <p className="text-zinc-300 mb-6 leading-relaxed">
-                {photo.description}
-              </p>
-              
-              <div className="grid grid-cols-2 gap-6 pt-6 border-t border-zinc-800">
-                <div>
-                  <h2 className="text-sm font-medium text-zinc-500 mb-1">Price</h2>
-                  <p className="text-2xl md:text-3xl font-bold text-white">{photo.price.toFixed(2)} ETH</p>
-                </div>
-                <div className="min-w-0 pr-2">
-                  <h2 className="text-sm font-medium text-zinc-500 mb-1">Owner</h2>
-                  <p className="text-sm md:text-base font-mono text-zinc-300 truncate" title={photo.owner}>
-                    {photo.ownerAddress}
+
+            <h1 className={cn(serif.className, 'mt-4 text-5xl leading-tight text-white md:text-6xl')}>{photo.title}</h1>
+            <p className="mt-4 leading-relaxed text-zinc-400">{photo.description}</p>
+
+            <div className="mt-8 flex flex-wrap gap-8">
+              <Person label="Tác giả" address={photo.creatorAddress} />
+              <Person label="Chủ sở hữu" address={photo.ownerAddress} />
+            </div>
+
+            {/* Price box */}
+            <div className="mt-8 rounded-2xl border border-white/10 bg-white/[0.02] p-6">
+              <p className="text-xs uppercase tracking-wider text-zinc-500">{photo.isListed ? 'Giá' : 'Trạng thái'}</p>
+              <p className="mt-1 font-mono text-3xl text-white">{photo.isListed ? formatEth(photo.price) : 'Không bán'}</p>
+              <div className="mt-6">
+                {isOwner ? (
+                  photo.isListed ? (
+                    <Button variant="secondary" size="lg" className="w-full" disabled={busy} onClick={onUnlist}>
+                      {busy ? 'Đang xử lý…' : 'Ngừng rao bán'}
+                    </Button>
+                  ) : (
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <label htmlFor="list-price" className="sr-only">Giá rao bán</label>
+                        <input
+                          id="list-price"
+                          type="number"
+                          inputMode="decimal"
+                          min="0.001"
+                          step="0.001"
+                          value={listPrice}
+                          onChange={(e) => setListPrice(e.target.value)}
+                          placeholder={photo.price > 0 ? photo.price.toString() : '0.5'}
+                          className="h-12 w-full rounded-full border border-white/10 bg-zinc-950 pl-5 pr-14 font-mono text-white placeholder:text-zinc-600 focus:border-white/30 focus:outline-none"
+                        />
+                        <span className="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 text-sm text-zinc-500">ETH</span>
+                      </div>
+                      <Button variant="accent" size="lg" disabled={busy} onClick={onList}>
+                        {busy ? 'Đang xử lý…' : 'Rao bán'}
+                      </Button>
+                    </div>
+                  )
+                ) : (
+                  <Button variant="accent" size="lg" className="w-full" disabled={!photo.isListed || busy} onClick={onBuy}>
+                    {busy
+                      ? 'Đang chờ giao dịch…'
+                      : !photo.isListed
+                        ? 'Chưa rao bán'
+                        : me
+                          ? `Mua với giá ${formatEth(photo.price)}`
+                          : 'Kết nối ví để mua'}
+                  </Button>
+                )}
+                {isOwner && <p className="mt-3 text-center text-xs text-zinc-500">Bạn đang sở hữu tác phẩm này.</p>}
+                {notice && (
+                  <p
+                    role="status"
+                    className={cn(
+                      'mt-3 text-center text-sm',
+                      notice.tone === 'ok' && 'text-emerald-300',
+                      notice.tone === 'error' && 'text-red-300',
+                      notice.tone === 'info' && 'text-zinc-400',
+                    )}
+                  >
+                    {notice.text}
                   </p>
-                </div>
+                )}
+                {isLocalArtwork(photo.id) && isOwner && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!confirm('Xóa tác phẩm demo này khỏi trình duyệt?')) return;
+                      removeArtwork(photo.id);
+                      router.push('/collection');
+                    }}
+                    className="mt-3 w-full text-center text-sm text-zinc-500 hover:text-red-400"
+                  >
+                    Xóa tác phẩm demo
+                  </button>
+                )}
               </div>
+              <p className="mt-4 text-xs text-zinc-500">
+                {getDisplayName(photo.creatorAddress)} nhận {photo.royalty}% mỗi lần tác phẩm được bán lại trên PhotoChain.
+              </p>
             </div>
-            
-            <div className="flex flex-col sm:flex-row gap-4 mb-10">
-              <button className="flex-1 bg-purple-600 hover:bg-purple-700 text-white py-4 px-6 rounded-xl font-bold text-lg transition-colors flex items-center justify-center gap-2 shadow-lg shadow-purple-900/20 active:scale-[0.98]">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a8 8 0 0 1-5 7.59l-9.74 3.73A2 2 0 0 1 2 20.13V8"/><path d="M22 13v9a2 2 0 0 1-2 2H6"/></svg>
-                Buy Now
-              </button>
-              <Link href="/collection" className="flex-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-white py-4 px-6 rounded-xl font-bold text-lg transition-colors flex items-center justify-center active:scale-[0.98]">
-                View Collection
-              </Link>
-            </div>
-            
-            <div className="space-y-6">
-              {/* Royalty Info */}
-              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <svg className="text-purple-500" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-                  <h3 className="text-lg font-bold text-white">Royalty Information</h3>
+
+            {/* Details */}
+            <dl className="mt-8 grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
+              {[
+                ['Giấy phép', LICENSE_LABELS[photo.license]],
+                ['Bản quyền', `${photo.royalty}%`],
+                ['Hợp đồng', formatAddress(photo.contractAddress)],
+                ['Token ID', formatTokenId(photo.tokenId)],
+                ...(photo.exif
+                  ? [
+                      ['Máy ảnh', photo.exif.camera],
+                      ['Thông số', `${photo.exif.focalLength} · ${photo.exif.aperture} · ${photo.exif.shutter} · ISO ${photo.exif.iso}`],
+                    ]
+                  : []),
+              ].map(([k, v]) => (
+                <div key={k} className="border-t border-white/10 pt-3">
+                  <dt className="text-zinc-500">{k}</dt>
+                  <dd className="mt-1 font-mono text-zinc-200">{v}</dd>
                 </div>
-                <div className="grid grid-cols-2 gap-4 mb-4">
-                  <div>
-                    <p className="text-sm text-zinc-500 mb-1">Creator Royalty</p>
-                    <p className="text-lg font-semibold text-white">{photo.royalty}%</p>
-                  </div>
-                  <div className="min-w-0 pr-2">
-                    <p className="text-sm text-zinc-500 mb-1">Creator Address</p>
-                    <p className="text-sm md:text-base font-mono text-zinc-300 truncate" title={photo.creatorAddress}>{photo.creatorAddress}</p>
-                  </div>
-                </div>
-                <p className="text-sm text-zinc-400 bg-zinc-950 p-3 rounded-lg border border-zinc-800/50">
-                  Royalty is paid to the creator when this artwork is resold.
-                </p>
-              </div>
-              
-              {/* Blockchain Info */}
-              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-                 <div className="flex items-center gap-3 mb-6">
-                  <svg className="text-blue-500" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
-                  <h3 className="text-lg font-bold text-white">Blockchain Information</h3>
-                </div>
-                
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center py-3 border-b border-zinc-800/50 last:border-0 last:pb-0">
-                    <span className="text-zinc-500 text-sm">Token ID</span>
-                    <span className="text-white font-mono text-sm max-w-[60%] truncate text-right">#{photo.tokenId.toString().padStart(3, '0')}</span>
-                  </div>
-                  <div className="flex justify-between items-center py-3 border-b border-zinc-800/50 last:border-0 last:pb-0">
-                    <span className="text-zinc-500 text-sm">Contract</span>
-                    <span className="text-white font-mono text-sm max-w-[60%] truncate text-right" title={photo.contractAddress}>{photo.contractAddress}</span>
-                  </div>
-                  <div className="flex justify-between items-center py-3 border-b border-zinc-800/50 last:border-0 last:pb-0">
-                    <span className="text-zinc-500 text-sm">Network</span>
-                    <span className="text-white text-sm max-w-[60%] truncate text-right">Test Network</span>
-                  </div>
-                  <div className="flex justify-between items-center py-3 border-b border-zinc-800/50 last:border-0 last:pb-0">
-                    <span className="text-zinc-500 text-sm">License</span>
-                    <span className="text-white text-sm max-w-[60%] text-right">{photo.license}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-          </div>
+              ))}
+            </dl>
+          </Reveal>
         </div>
-      </div>
-    </div>
+
+        {/* History */}
+        <Reveal className="mt-20">
+        <section>
+          <h2 className={cn(serif.className, 'mb-6 text-3xl text-white')}>Lịch sử sở hữu</h2>
+          {sales.length === 0 ? (
+            <p className="text-sm text-zinc-500">Chưa có giao dịch — tác phẩm vẫn thuộc về tác giả.</p>
+          ) : (
+            <div className="overflow-x-auto rounded-2xl border border-white/10">
+              <table className="w-full text-left text-sm">
+                <thead className="text-xs uppercase tracking-wider text-zinc-500">
+                  <tr className="border-b border-white/10">
+                    <th className="px-5 py-3 font-medium">Người bán</th>
+                    <th className="px-5 py-3 font-medium">Người mua</th>
+                    <th className="px-5 py-3 text-right font-medium">Giá</th>
+                    <th className="px-5 py-3 text-right font-medium">Bản quyền</th>
+                    <th className="px-5 py-3 text-right font-medium">Ngày</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sales.map((s, i) => {
+                    const secondary = !sameAddress(s.from, photo.creatorAddress);
+                    return (
+                      <tr key={s.txHash ?? `${s.date}-${s.from}-${i}`} className="border-b border-white/5 last:border-0">
+                        <td className="px-5 py-3 text-zinc-300">{getDisplayName(s.from)}</td>
+                        <td className="px-5 py-3 text-zinc-300">{getDisplayName(s.to)}</td>
+                        <td className="px-5 py-3 text-right font-mono text-white">{formatEth(s.price)}</td>
+                        <td className="px-5 py-3 text-right font-mono text-zinc-400">
+                          {secondary ? formatEth(s.royalty ?? (s.price * photo.royalty) / 100, 3) : '— bán lần đầu'}
+                        </td>
+                        <td className="px-5 py-3 text-right text-zinc-500">{formatDate(s.date)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+        </Reveal>
+      </Container>
+
+      {more.length > 0 && (
+        <section className="border-t border-white/10 py-16">
+          <Container>
+            <Reveal>
+              <h2 className={cn(serif.className, 'mb-10 text-3xl text-white')}>Thêm trong mục {CATEGORY_LABELS[photo.category]}</h2>
+            </Reveal>
+            <PhotographyGrid items={more} />
+          </Container>
+        </section>
+      )}
+    </>
   );
 }

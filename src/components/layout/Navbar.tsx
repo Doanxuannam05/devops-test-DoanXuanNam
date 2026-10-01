@@ -1,68 +1,122 @@
-"use client";
-import Link from 'next/link';
-import { useState } from 'react';
+'use client';
 
-export default function Navbar() {
-  const [isOpen, setIsOpen] = useState(false);
+import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
+import { useState, type FormEvent } from 'react';
+import Container from '@/components/ui/Container';
+import Logo from '@/components/ui/Logo';
+import { CloseIcon, MenuIcon, SearchIcon } from '@/components/ui/icons';
+import WalletButton from '@/components/wallet/WalletButton';
+import { cn } from '@/lib/format';
+
+const NAV_LINKS = [
+  { href: '/marketplace', label: 'Khám phá' },
+  { href: '/create', label: 'Tạo tác phẩm' },
+  { href: '/collection', label: 'Bộ sưu tập' },
+];
+
+function SearchForm({ className, autoFocus }: { className?: string; autoFocus?: boolean }) {
+  const router = useRouter();
+  const [q, setQ] = useState('');
+
+  const onSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    const query = q.trim();
+    router.push(query ? `/marketplace?q=${encodeURIComponent(query)}` : '/marketplace');
+  };
 
   return (
-    <nav className="border-b border-zinc-800 bg-zinc-950/80 backdrop-blur-md sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
-          <div className="flex items-center gap-8">
-            <Link href="/" className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
-              <span className="text-purple-500">Photo</span>Chain
-            </Link>
-            
-            {/* Desktop Menu */}
-            <div className="hidden md:flex items-center space-x-6">
-              <Link href="/marketplace" className="text-zinc-400 hover:text-white transition-colors">Explore</Link>
-              <Link href="/create" className="text-zinc-400 hover:text-white transition-colors">Create</Link>
-              <Link href="/collection" className="text-zinc-400 hover:text-white transition-colors">Collection</Link>
-            </div>
+    <form role="search" onSubmit={onSubmit} className={cn('relative', className)}>
+      <SearchIcon size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+      <label htmlFor="nav-search" className="sr-only">Tìm kiếm ảnh</label>
+      <input
+        id="nav-search"
+        type="search"
+        value={q}
+        autoFocus={autoFocus}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="Tìm ảnh, nhiếp ảnh gia…"
+        className="h-9 w-full rounded-full border border-white/10 bg-white/5 pl-9 pr-4 text-sm text-white placeholder:text-zinc-500 focus:border-white/25 focus:outline-none"
+      />
+    </form>
+  );
+}
+
+export default function Navbar() {
+  const pathname = usePathname();
+  // The menu is "open for a given pathname" → it closes automatically when the route changes,
+  // without a setState-in-effect.
+  const [openAt, setOpenAt] = useState<string | null>(null);
+  const isOpen = openAt === pathname;
+  const toggleMenu = () => setOpenAt(isOpen ? null : pathname);
+
+  const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+
+  return (
+    <header className="sticky top-0 z-50 border-b border-white/10 bg-zinc-950/85 backdrop-blur-md">
+      <Container>
+        <nav className="flex h-16 items-center justify-between gap-6" aria-label="Điều hướng chính">
+          <div className="flex items-center gap-10">
+            <Logo />
+            <ul className="hidden items-center gap-1 md:flex">
+              {NAV_LINKS.map((link) => (
+                <li key={link.href}>
+                  <Link
+                    href={link.href}
+                    aria-current={isActive(link.href) ? 'page' : undefined}
+                    className={cn(
+                      'rounded-full px-3 py-1.5 text-sm transition-colors',
+                      isActive(link.href) ? 'bg-white/10 text-white' : 'text-zinc-400 hover:text-white',
+                    )}
+                  >
+                    {link.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
           </div>
 
-          {/* Desktop Right */}
-          <div className="hidden md:flex items-center space-x-4">
-            <button className="p-2 text-zinc-400 hover:text-white transition-colors" aria-label="Search">
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-            </button>
-            <button className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-full transition-colors font-medium">
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a8 8 0 0 1-5 7.59l-9.74 3.73A2 2 0 0 1 2 20.13V8"/><path d="M22 13v9a2 2 0 0 1-2 2H6"/></svg>
-              <span className="hidden sm:inline">Connect Wallet</span>
-            </button>
+          <div className="hidden flex-1 items-center justify-end gap-3 md:flex">
+            <SearchForm className="w-full max-w-xs" />
+            <WalletButton />
           </div>
 
-          {/* Mobile menu button */}
-          <div className="md:hidden flex items-center gap-4">
-            <button className="p-2 text-zinc-400" aria-label="Search">
-               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-            </button>
-            <button onClick={() => setIsOpen(!isOpen)} className="text-zinc-400 hover:text-white p-2">
-              {isOpen ? (
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-              ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
-              )}
-            </button>
-          </div>
-        </div>
-      </div>
+          <button
+            type="button"
+            onClick={toggleMenu}
+            aria-expanded={isOpen}
+            aria-controls="mobile-menu"
+            aria-label={isOpen ? 'Đóng menu' : 'Mở menu'}
+            className="rounded-full p-2 text-zinc-400 hover:bg-white/5 hover:text-white md:hidden"
+          >
+            {isOpen ? <CloseIcon size={22} /> : <MenuIcon size={22} />}
+          </button>
+        </nav>
+      </Container>
 
-      {/* Mobile Menu */}
       {isOpen && (
-        <div className="md:hidden bg-zinc-900 border-b border-zinc-800">
-          <div className="px-4 pt-2 pb-6 flex flex-col">
-            <Link href="/marketplace" className="text-zinc-300 hover:text-white block py-3" onClick={() => setIsOpen(false)}>Explore</Link>
-            <Link href="/create" className="text-zinc-300 hover:text-white block py-3" onClick={() => setIsOpen(false)}>Create</Link>
-            <Link href="/collection" className="text-zinc-300 hover:text-white block py-3" onClick={() => setIsOpen(false)}>Collection</Link>
-            <button className="flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 text-white w-full py-3 rounded-xl transition-colors mt-4">
-               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a8 8 0 0 1-5 7.59l-9.74 3.73A2 2 0 0 1 2 20.13V8"/><path d="M22 13v9a2 2 0 0 1-2 2H6"/></svg>
-              <span>Connect Wallet</span>
-            </button>
-          </div>
+        <div id="mobile-menu" className="border-t border-white/10 bg-zinc-950 md:hidden">
+          <Container className="flex flex-col gap-1 py-4">
+            <SearchForm className="mb-3" />
+            {NAV_LINKS.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                aria-current={isActive(link.href) ? 'page' : undefined}
+                className={cn(
+                  'rounded-xl px-3 py-3 text-base',
+                  isActive(link.href) ? 'bg-white/10 text-white' : 'text-zinc-300 hover:bg-white/5',
+                )}
+              >
+                {link.label}
+              </Link>
+            ))}
+            <div className="mt-3">
+              <WalletButton fullWidth />
+            </div>
+          </Container>
         </div>
       )}
-    </nav>
+    </header>
   );
 }

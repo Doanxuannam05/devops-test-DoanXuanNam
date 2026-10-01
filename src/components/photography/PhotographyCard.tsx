@@ -1,59 +1,88 @@
 import Image from 'next/image';
 import Link from 'next/link';
-import { Photography } from '@/types/photography';
+import { ImageIcon } from '@/components/ui/icons';
+import { formatEth } from '@/lib/format';
+import { CATEGORY_LABELS } from '@/lib/labels';
+import { getDisplayName } from '@/lib/photography';
+import type { Photography } from '@/types/photography';
 
-interface PhotographyCardProps {
-  photography: Photography;
+/** next/image chỉ tối ưu ảnh từ host đã khai báo; ảnh upload/local/data: hiển thị trực tiếp. */
+export const canOptimize = (src?: string | null) => !!src && src.startsWith('https://images.unsplash.com/');
+
+interface CardBodyProps {
+  image?: string | null;
+  title: string;
+  creatorName: string;
+  category?: string;
+  price?: number | null;
+  royalty: number;
+  isListed?: boolean;
 }
 
-export default function PhotographyCard({ photography }: PhotographyCardProps) {
+/** Pure visual card – reused by the grid AND by the live preview on /create. */
+export function PhotoCardBody({ image, title, creatorName, category, price, royalty, isListed = true }: CardBodyProps) {
+  const isBlob = !canOptimize(image);
+
   return (
-    <Link href={`/photo/${photography.id}`} className="group block h-full">
-      <div className="bg-zinc-900 rounded-xl overflow-hidden border border-zinc-800 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-purple-900/20 hover:border-purple-500/50 flex flex-col h-full">
-        {/* Image wrapper */}
-        <div className="relative aspect-[4/3] overflow-hidden">
-          <Image 
-            src={photography.image} 
-            alt={photography.title} 
+    <div>
+      <div className="relative aspect-[4/5] overflow-hidden rounded-2xl bg-zinc-900 ring-1 ring-white/10">
+        {image ? (
+          <Image
+            src={image}
+            alt={title}
             fill
-            className="object-cover transition-transform duration-500 group-hover:scale-105"
-            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+            unoptimized={isBlob}
+            sizes="(min-width: 1280px) 25vw, (min-width: 768px) 50vw, 100vw"
+            className="object-cover transition-transform duration-700 ease-out group-hover:scale-105"
           />
-          <div className="absolute top-3 right-3 bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-full text-xs font-semibold text-white border border-white/10 z-10">
-            {photography.category}
+        ) : (
+          <div className="flex h-full flex-col items-center justify-center gap-2 text-zinc-600">
+            <ImageIcon size={36} />
+            <span className="text-xs">Ảnh của bạn</span>
           </div>
-        </div>
-        
-        {/* Content */}
-        <div className="p-5 flex flex-col flex-grow">
-          <div className="flex justify-between items-start mb-2">
-            <div className="min-w-0 pr-2">
-              <h3 className="text-lg font-bold text-white mb-1 truncate">{photography.title}</h3>
-              <p className="text-sm text-zinc-400 truncate">by {photography.creator}</p>
-            </div>
-            <div className="text-right shrink-0">
-              <span className="text-xs bg-zinc-800 text-zinc-300 px-2 py-1 rounded-md mb-1 inline-block">
-                Token #{photography.tokenId.toString().padStart(3, '0')}
-              </span>
-            </div>
-          </div>
-          
-          <div className="mt-auto pt-4 flex items-center justify-between border-t border-zinc-800">
-            <div>
-              <p className="text-xs text-zinc-500 mb-0.5">Price</p>
-              <p className="text-sm font-semibold text-white">{photography.price.toFixed(2)} ETH</p>
-            </div>
-            <div className="text-right">
-              <p className="text-xs text-zinc-500 mb-0.5">Creator Royalty</p>
-              <p className="text-sm font-semibold text-purple-400">{photography.royalty}%</p>
-            </div>
-          </div>
-          
-          <button className="w-full mt-4 bg-zinc-800 hover:bg-zinc-700 text-white py-2 rounded-lg text-sm font-medium transition-colors group-hover:bg-purple-600">
-            View Artwork
-          </button>
+        )}
+
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
+
+        {category && (
+          <span className="absolute left-3 top-3 rounded-full bg-black/50 px-2.5 py-1 text-[11px] font-medium text-white/90 backdrop-blur-md">
+            {category}
+          </span>
+        )}
+
+        <div className="absolute inset-x-0 bottom-0 p-4">
+          <h3 className="truncate text-base font-semibold text-white">{title}</h3>
+          <p className="truncate text-sm text-white/60">bởi {creatorName}</p>
         </div>
       </div>
+
+      <div className="flex items-center justify-between px-1 pt-3 text-sm">
+        {isListed && price != null ? (
+          <span className="font-mono text-white">{formatEth(price)}</span>
+        ) : (
+          <span className="text-zinc-500">Chưa rao bán</span>
+        )}
+        <span className="text-zinc-500">Bản quyền {royalty}%</span>
+      </div>
+    </div>
+  );
+}
+
+export default function PhotographyCard({ photography: p }: { photography: Photography }) {
+  return (
+    <Link
+      href={`/photo/${p.id}`}
+      className="group block rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-4 focus-visible:ring-offset-zinc-950"
+    >
+      <PhotoCardBody
+        image={p.image}
+        title={p.title}
+        creatorName={getDisplayName(p.creatorAddress)}
+        category={CATEGORY_LABELS[p.category]}
+        price={p.price}
+        royalty={p.royalty}
+        isListed={p.isListed}
+      />
     </Link>
   );
 }

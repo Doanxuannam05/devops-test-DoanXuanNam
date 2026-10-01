@@ -1,37 +1,49 @@
-"use client";
+'use client';
 
-const CATEGORIES = [
-  'All',
-  'Nature',
-  'Portrait',
-  'Landscape',
-  'Street',
-  'Architecture',
-  'Travel',
-  'Abstract'
-];
+import { cn } from '@/lib/format';
+import { categoryLabel } from '@/lib/labels';
+import { CATEGORIES, type Category } from '@/types/photography';
+
+export type CategoryOption = Category | 'All';
+const OPTIONS: CategoryOption[] = ['All', ...CATEGORIES];
 
 interface CategoryFilterProps {
-  activeCategory: string;
-  onSelectCategory: (category: string) => void;
+  activeCategory: CategoryOption;
+  onSelectCategory: (category: CategoryOption) => void;
+  counts?: Partial<Record<CategoryOption, number>>;
 }
 
-export default function CategoryFilter({ activeCategory, onSelectCategory }: CategoryFilterProps) {
+export default function CategoryFilter({ activeCategory, onSelectCategory, counts }: CategoryFilterProps) {
   return (
-    <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide w-full max-w-full">
-      {CATEGORIES.map((category) => (
-        <button
-          key={category}
-          onClick={() => onSelectCategory(category)}
-          className={`px-4 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-colors border ${
-            activeCategory === category 
-              ? 'bg-purple-600 border-purple-600 text-white' 
-              : 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:bg-zinc-800 hover:text-white'
-          }`}
-        >
-          {category}
-        </button>
-      ))}
+    <div
+      role="group"
+      aria-label="Lọc theo thể loại"
+      className="flex w-full gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+    >
+      {OPTIONS.map((category) => {
+        const active = activeCategory === category;
+        return (
+          <button
+            key={category}
+            type="button"
+            aria-pressed={active}
+            onClick={() => onSelectCategory(category)}
+            className={cn(
+              'inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded-full border px-4 text-sm transition-colors',
+              active
+                ? 'border-white bg-white text-zinc-950'
+                : 'border-white/10 text-zinc-400 hover:border-white/25 hover:text-white',
+            )}
+          >
+            {categoryLabel(category)}
+            {counts?.[category] !== undefined && (
+              <span className={cn('font-mono text-[11px]', active ? 'text-zinc-500' : 'text-zinc-600')}>
+                {counts[category]}
+              </span>
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }
