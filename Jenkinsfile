@@ -9,19 +9,14 @@ pipeline {
     environment {
         PROJECT_NAME            = 'devops-test'
         BRANCH                  = 'main'
-        SITE_URL                = 'https://devops-test-doan-xuan-nam-blond.vercel.app'
+        SITE_HOST               = 'devops-test-doan-xuan-nam-blond.vercel.app'
         NEXT_TELEMETRY_DISABLED = '1'
         VERCEL_TOKEN            = credentials('vercel-token')
         VERCEL_ORG_ID           = credentials('vercel-org-id')
         VERCEL_PROJECT_ID       = credentials('vercel-project-id')
-        TG_TOKEN                = credentials('telegram-bot-token')
-        TG_CHAT_ID              = credentials('telegram-chat-id')
     }
 
     stages {
-        stage('Notify Start') {
-            steps { script { notify("🚀 DEPLOY STARTED\nProject: ${env.PROJECT_NAME}\nBranch: ${env.BRANCH}") } }
-        }
         stage('Checkout') {
             steps { checkout scm }
         }
@@ -40,21 +35,7 @@ pipeline {
     }
 
     post {
-        success { script { notify("✅ DEPLOY SUCCESS\nProject: ${env.PROJECT_NAME}\nBranch: ${env.BRANCH}\nURL: ${env.SITE_URL}") } }
-        failure { script { notify("❌ DEPLOY FAILED\nProject: ${env.PROJECT_NAME}\nBranch: ${env.BRANCH}\nPlease check Jenkins.") } }
-    }
-}
-
-def notify(String msg) {
-    try {
-        withEnv(["TG_MSG=${msg}"]) {
-            sh '''
-                curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
-                  --data-urlencode "chat_id=${TG_CHAT_ID}" \
-                  --data-urlencode "text=${TG_MSG}"
-            '''
-        }
-    } catch (e) {
-        echo "Telegram notify failed: ${e}"
+        success { echo "BUILD SUCCESS - ${env.PROJECT_NAME} (${env.BRANCH}) - [https://${env.SITE_HOST}](https://${env.SITE_HOST})" }
+        failure { echo "BUILD FAILED - ${env.PROJECT_NAME} (${env.BRANCH}) - please check log" }
     }
 }
