@@ -9,7 +9,7 @@ pipeline {
     environment {
         PROJECT_NAME            = 'devops-test'
         BRANCH                  = 'main'
-        SITE_URL                = '[https://YOUR-DOMAIN.vercel.app](https://YOUR-DOMAIN.vercel.app)'
+        SITE_URL                = '[https://devops-test-doan-xuan-nam-blond.vercel.app](https://devops-test-doan-xuan-nam-blond.vercel.app)'
         NEXT_TELEMETRY_DISABLED = '1'
         VERCEL_TOKEN            = credentials('vercel-token')
         VERCEL_ORG_ID           = credentials('vercel-org-id')
@@ -49,7 +49,7 @@ def notify(String msg) {
     try {
         withEnv(["TG_MSG=${msg}"]) {
             sh '''
-                curl -s -X POST "[https://api.telegram.org/bot${TG_TOKEN}/sendMessage](https://api.telegram.org/bot${TG_TOKEN}/sendMessage)" \
+                                curl -s -X POST "[https://api.telegram.org/bot${TG_TOKEN}/sendMessage](https://api.telegram.org/bot${TG_TOKEN}/sendMessage)" \
                   --data-urlencode "chat_id=${TG_CHAT_ID}" \
                   --data-urlencode "text=${TG_MSG}"
             '''
