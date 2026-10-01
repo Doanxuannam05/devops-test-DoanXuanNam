@@ -1,0 +1,5 @@
+blockchain/
+node_modules/
+.next/
+.env
+.env.*
