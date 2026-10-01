@@ -1,7 +1,7 @@
 pipeline {
     agent any
 
-    tools { nodejs 'node22' }
+    tools { nodejs 'NodeJS-22' }
 
     triggers { githubPush() }
     options  { disableConcurrentBuilds() }
@@ -9,7 +9,7 @@ pipeline {
     environment {
         PROJECT_NAME            = 'devops-test'
         BRANCH                  = 'main'
-        SITE_URL = '[https://devops-test-doan-xuan-nam-blond.vercel.app](https://devops-test-doan-xuan-nam-blond.vercel.app)'
+        SITE_URL                = '[https://devops-test-doan-xuan-nam-blond.vercel.app](https://devops-test-doan-xuan-nam-blond.vercel.app)'
         NEXT_TELEMETRY_DISABLED = '1'
         VERCEL_TOKEN            = credentials('vercel-token')
         VERCEL_ORG_ID           = credentials('vercel-org-id')
